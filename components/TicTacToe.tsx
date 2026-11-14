@@ -22,12 +22,13 @@ export default function TicTacToe() {
   const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
   const [round, setRound] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [started, setStarted] = useState(false); // nothing runs until New game is clicked
 
   const result = getResult(board);
   const moves = board.filter(Boolean).length;
 
   function play(i: number) {
-    if (board[i] || result) return;
+    if (!started || board[i] || result) return;
     const next = board.map((c, idx) => (idx === i ? turn : c));
     setBoard(next);
 
@@ -46,33 +47,38 @@ export default function TicTacToe() {
   }
 
   function autoPlay() {
-    if (result) return;
+    if (!started || result) return;
     const empty = board.flatMap((c, i) => (c ? [] : [i]));
     play(empty[Math.floor(Math.random() * empty.length)]);
   }
 
   function newGame() {
-    const next: Player = starter === "X" ? "O" : "X"; // alternate who opens
+    // First game: Kiwi opens. After that, the opener alternates.
+    const next: Player = !started ? "X" : starter === "X" ? "O" : "X";
+    setStarted(true);
     setStarter(next);
     setTurn(next);
     setBoard(EMPTY);
     setRound((r) => r + 1);
   }
 
-  /** Full reset: clears the board and the scores, and Kiwi opens again. */
+  /** Full reset: clears the board and scores and returns to the idle screen. */
   function resetAll() {
     setScores({ X: 0, O: 0, draws: 0 });
     setStarter("X");
     setTurn("X");
     setBoard(EMPTY);
+    setStarted(false);
     setRound((r) => r + 1);
   }
 
-  const status = result
-    ? result.winner
-      ? `${NAMES[result.winner]} wins!`
-      : "It's a draw!"
-    : `${NAMES[turn]}'s turn`;
+  const status = !started
+    ? "Press New game to start"
+    : result
+      ? result.winner
+        ? `${NAMES[result.winner]} wins!`
+        : "It's a draw!"
+      : `${NAMES[turn]}'s turn`;
 
   const focus =
     "focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-white";
@@ -81,7 +87,7 @@ export default function TicTacToe() {
     <>
       <div
         className={`tile grid size-14 sm:size-16 place-items-center transition-transform ${
-          !result && turn === player ? "tile-active scale-105" : ""
+          started && !result && turn === player ? "tile-active scale-105" : ""
         }`}
       >
         <Mark player={player} className="relative w-3/4" />
@@ -136,7 +142,7 @@ export default function TicTacToe() {
             style={
               {
                 "--turn-ms": `${TURN_MS}ms`,
-                animationPlayState: result ? "paused" : "running",
+                animationPlayState: !started || result ? "paused" : "running",
               } as CSSProperties
             }
             onAnimationEnd={autoPlay}
@@ -148,7 +154,7 @@ export default function TicTacToe() {
       <div className="grid grid-cols-3 gap-3">
         {board.map((value, i) => {
           const isWinning = !!result?.line?.includes(i);
-          const playable = !value && !result;
+          const playable = started && !value && !result;
           return (
             <button
               key={i}
