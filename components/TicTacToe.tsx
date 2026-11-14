@@ -1,67 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { getResult, type Cell, type Player } from "@/lib/game";
+import { sfx } from "@/lib/sound";
+import {
+  AlarmClock,
+  ArrowPointer,
+  Mark,
+  ResetIcon,
+  SpeakerIcon,
+} from "./icons";
 
+const TURN_MS = 10_000; // time per turn; a random move is played when it runs out
 const EMPTY: Cell[] = Array(9).fill(null);
-
-// Full class strings so Tailwind can detect them
-const tone = {
-  X: {
-    text: "text-indigo-600 dark:text-indigo-400",
-    win: "bg-indigo-500/10 ring-2 ring-indigo-500",
-    active: "ring-2 ring-indigo-500",
-  },
-  O: {
-    text: "text-amber-500 dark:text-amber-400",
-    win: "bg-amber-500/10 ring-2 ring-amber-500",
-    active: "ring-2 ring-amber-500",
-  },
-} as const;
-
-function Mark({
-  player,
-  animate = false,
-  className = "",
-}: {
-  player: Player;
-  animate?: boolean;
-  className?: string;
-}) {
-  const draw = animate ? "draw" : "";
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="11"
-      strokeLinecap="round"
-      className={className}
-      aria-hidden="true"
-    >
-      {player === "X" ? (
-        <>
-          <path d="M24 24 L76 76" pathLength={1} className={draw} />
-          <path
-            d="M76 24 L24 76"
-            pathLength={1}
-            className={`${draw} ${animate ? "draw-late" : ""}`}
-          />
-        </>
-      ) : (
-        <circle cx="50" cy="50" r="28" pathLength={1} className={draw} />
-      )}
-    </svg>
-  );
-}
+const NAMES: Record<Player, string> = { X: "Kiwi", O: "Apple" };
 
 export default function TicTacToe() {
   const [board, setBoard] = useState<Cell[]>(EMPTY);
   const [turn, setTurn] = useState<Player>("X");
   const [starter, setStarter] = useState<Player>("X");
   const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
+  const [round, setRound] = useState(0);
+  const [muted, setMuted] = useState(false);
 
   const result = getResult(board);
+  const moves = board.filter(Boolean).length;
 
   function play(i: number) {
     if (board[i] || result) return;
@@ -75,9 +38,17 @@ export default function TicTacToe() {
           ? { ...s, [r.winner]: s[r.winner] + 1 }
           : { ...s, draws: s.draws + 1 },
       );
+      if (!muted) (r.winner ? sfx.win : sfx.draw)();
     } else {
       setTurn(turn === "X" ? "O" : "X");
+      if (!muted) sfx.place(turn);
     }
+  }
+
+  function autoPlay() {
+    if (result) return;
+    const empty = board.flatMap((c, i) => (c ? [] : [i]));
+    play(empty[Math.floor(Math.random() * empty.length)]);
   }
 
   function newGame() {
@@ -85,58 +56,98 @@ export default function TicTacToe() {
     setStarter(next);
     setTurn(next);
     setBoard(EMPTY);
+    setRound((r) => r + 1);
+  }
+
+  /** Full reset: clears the board and the scores, and Kiwi opens again. */
+  function resetAll() {
+    setScores({ X: 0, O: 0, draws: 0 });
+    setStarter("X");
+    setTurn("X");
+    setBoard(EMPTY);
+    setRound((r) => r + 1);
   }
 
   const status = result
     ? result.winner
-      ? `${result.winner} wins!`
-      : "It's a draw"
-    : `${turn}'s turn`;
+      ? `${NAMES[result.winner]} wins!`
+      : "It's a draw!"
+    : `${NAMES[turn]}'s turn`;
 
-  const tile =
-    "flex flex-col items-center gap-1 rounded-2xl bg-white px-3 py-3 ring-1 ring-stone-900/10 dark:bg-white/5 dark:ring-white/10";
+  const focus =
+    "focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-white";
+
+  const ScoreTile = ({ player }: { player: Player }) => (
+    <>
+      <div
+        className={`tile grid size-14 sm:size-16 place-items-center transition-transform ${
+          !result && turn === player ? "tile-active scale-105" : ""
+        }`}
+      >
+        <Mark player={player} className="relative w-3/4" />
+      </div>
+      <div className="tile grid size-14 sm:size-16 place-items-center">
+        <span className="num-cartoon relative text-4xl tabular-nums">
+          {scores[player]}
+        </span>
+      </div>
+    </>
+  );
 
   return (
-    <section className="w-full max-w-sm space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Tic-Tac-Toe</h1>
+    <section className="mx-auto w-full max-w-sm space-y-4 px-4 py-6">
+      {/* Header */}
+      <header className="relative flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setMuted((m) => !m)}
+          aria-label={muted ? "Turn sound on" : "Turn sound off"}
+          aria-pressed={muted}
+          className={`round-btn grid size-11 shrink-0 place-items-center ${focus}`}
+        >
+          <SpeakerIcon muted={muted} className="size-6" />
+        </button>
 
-      {/* Scoreboard — the highlighted tile shows whose turn it is */}
-      <div className="grid grid-cols-3 gap-3 text-sm">
-        {(["X", "draws", "O"] as const).map((key) => {
-          const isPlayer = key !== "draws";
-          const active = isPlayer && !result && turn === key;
-          return (
-            <div
-              key={key}
-              className={`${tile} transition-shadow ${active ? tone[key as Player].active : ""}`}
-            >
-              {isPlayer ? (
-                <Mark player={key} className={`size-5 ${tone[key].text}`} />
-              ) : (
-                <span className="h-5 leading-5 text-stone-500 dark:text-stone-400">
-                  Draws
-                </span>
-              )}
-              <span className="text-xl font-semibold tabular-nums">
-                {scores[key]}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+        <h1 className="title-cartoon min-w-0 whitespace-nowrap text-center text-3xl sm:text-4xl">
+          TIC-TAC-TOE
+        </h1>
 
-      <p
-        aria-live="polite"
-        className="text-center text-lg font-medium text-stone-700 dark:text-stone-300"
+        <button
+          type="button"
+          onClick={resetAll}
+          aria-label="Reset game and scores"
+          className={`round-btn grid size-11 shrink-0 place-items-center ${focus}`}
+        >
+          <ResetIcon className="size-6" />
+        </button>
+      </header>
+
+      {/* Turn timer */}
+      <div
+        className="flex items-center"
+        role="timer"
+        aria-label="Time left this turn"
       >
-        {status}
-      </p>
+        <AlarmClock className="relative z-10 size-11 shrink-0" />
+        <div className="timer-track -ml-3 h-5 flex-1">
+          <div
+            key={`${round}-${moves}`}
+            className="timer-fill"
+            style={
+              {
+                "--turn-ms": `${TURN_MS}ms`,
+                animationPlayState: result ? "paused" : "running",
+              } as CSSProperties
+            }
+            onAnimationEnd={autoPlay}
+          />
+        </div>
+      </div>
 
       {/* Board */}
       <div className="grid grid-cols-3 gap-3">
         {board.map((value, i) => {
           const isWinning = !!result?.line?.includes(i);
-          const dimmed = !!result?.winner && !isWinning;
           const playable = !value && !result;
           return (
             <button
@@ -144,41 +155,51 @@ export default function TicTacToe() {
               type="button"
               onClick={() => play(i)}
               disabled={!playable}
-              aria-label={`Row ${Math.floor(i / 3) + 1}, column ${(i % 3) + 1}: ${value ?? "empty"}`}
-              className={[
-                "group grid aspect-square place-items-center rounded-2xl ring-1 transition",
-                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900 dark:focus-visible:outline-white",
-                isWinning && result?.winner
-                  ? tone[result.winner].win
-                  : "bg-white ring-stone-900/10 dark:bg-white/5 dark:ring-white/10",
-                playable
-                  ? "cursor-pointer hover:bg-stone-50 dark:hover:bg-white/10"
-                  : "cursor-default",
-              ].join(" ")}
+              aria-label={`Row ${Math.floor(i / 3) + 1}, column ${(i % 3) + 1}: ${value ? NAMES[value] : "empty"}`}
+              className={`tile group grid aspect-square place-items-center overflow-visible ${
+                isWinning ? "tile-win" : ""
+              } ${playable ? "cursor-pointer" : "cursor-default"} ${focus}`}
             >
-              {value ? (
-                <Mark
-                  player={value}
-                  animate
-                  className={`w-1/2 ${tone[value].text} ${dimmed ? "opacity-40" : ""}`}
-                />
-              ) : (
-                playable && (
-                  <Mark
-                    player={turn}
-                    className={`w-1/2 opacity-0 transition-opacity group-hover:opacity-20 group-focus-visible:opacity-20 ${tone[turn].text}`}
-                  />
-                )
+              {value && <Mark player={value} className="pop relative w-4/5" />}
+              {playable && (
+                <ArrowPointer className="pointer-events-none absolute -bottom-1 right-1 w-9 rotate-[-30deg] opacity-0 drop-shadow transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
               )}
             </button>
           );
         })}
       </div>
 
+      {/* Status */}
+      <p
+        aria-live="polite"
+        className={`text-center ${
+          result
+            ? "num-cartoon text-3xl"
+            : "text-xl text-white [text-shadow:0_2px_0_rgba(0,0,0,.35)]"
+        }`}
+      >
+        {status}
+      </p>
+
+      {/* Scoreboard: kiwi on the left, apple on the right */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          <ScoreTile player="X" />
+        </div>
+        <span className="shrink-0 whitespace-nowrap px-1 text-center text-sm leading-tight text-white/90 [text-shadow:0_2px_0_rgba(0,0,0,.35)]">
+          Draws
+          <br />
+          <span className="text-lg tabular-nums">{scores.draws}</span>
+        </span>
+        <div className="flex flex-row-reverse gap-2">
+          <ScoreTile player="O" />
+        </div>
+      </div>
+
       <button
         type="button"
         onClick={newGame}
-        className="w-full rounded-full bg-stone-900 px-6 py-3 font-medium text-white transition hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900 active:scale-[0.99] dark:bg-white dark:text-stone-900 dark:hover:bg-stone-200 dark:focus-visible:outline-white"
+        className={`btn-green w-full py-3 text-xl text-white ${focus}`}
       >
         New game
       </button>

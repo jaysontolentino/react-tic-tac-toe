@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Lilita_One } from "next/font/google";
 import "./globals.css";
 
-const bricolage = Bricolage_Grotesque({
+const lilita = Lilita_One({
+  weight: "400",
   subsets: ["latin"],
-  variable: "--font-bricolage",
+  variable: "--font-lilita",
 });
 
 export const metadata: Metadata = {
   title: "Tic-Tac-Toe",
-  description: "A two-player tic-tac-toe game.",
+  description: "Kiwi vs. Apple tic-tac-toe with a turn timer.",
 };
 
 export default function RootLayout({
@@ -18,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={bricolage.variable}>
+    <html lang="en" className={lilita.variable}>
       <body className="font-sans">{children}</body>
     </html>
   );
